@@ -1,0 +1,3 @@
+# Maze
+
+create maze map

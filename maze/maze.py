@@ -1,123 +1,148 @@
 from utils import *
 import random
-import copy
 
 
 class Map():
-    def __init__(self, start_pos, end_pos, width=25, height=25):
-        self.start_pos = Pos(start_pos[0], start_pos[1])
-        self.end_pos = Pos(end_pos[0], end_pos[1])
+    def __init__(self, start_tile, end_tile, width=32, height=32):
+        self.start_tile = Tile(start_tile[0], start_tile[1])
+        self.end_tile = Tile(end_tile[0], end_tile[1])
         self.width = width
         self.height = height
-        self.arr = [[MapStatus.empty] * width for i in xrange(height)]
-
-        # self.create_path()
+        self.arr = [[MapType.empty] * height for i in xrange(width)]
+        self.dig_total = 0
 
     def show_map(self):
-        for y in xrange(self.height - 1, -1, -1):
-            s = ''
+        em_total = 0
+        wa_total = 0
+        print '_' * (self.width + 2)
+        for y in xrange(self.height):
+            y = self.height - y - 1
+            s = '|'
             for x in xrange(self.width):
-                s += str(self.arr[x][y])
-            print s
-        print
+                if self.arr[x][y] is MapType.empty: em_total += 1
+                if self.arr[x][y] is MapType.wall: wa_total += 1
 
-    def dig_path(self, path, status=MapStatus.path):
-        for pos in path:
-            self.dig_pos(pos, status=status)
+                s += self.arr[x][y]
+            print s + '|'
+        print '-' * (self.width + 2)
+        print 'Path:', self.dig_total
+        print 'Empty:', em_total
+        print 'Wall:', wa_total
 
-    def dig_pos(self, pos, status=MapStatus.path):
-        self.arr[pos.x][pos.y] = status
+    def inside(self, tile, y=None):
+        if y is not None: tile = Tile(tile, y)
+        x = tile.x
+        y = tile.y
+        if x < 0 or x >= self.width: return False
+        if y < 0 or y >= self.height: return False
+        return True
 
-    def can_dig_next(self, cur_pos, direction, path):
-        x = cur_pos.x + direction[0]
-        if x < 0 or x >= self.width: return None
-        y = cur_pos.y + direction[1]
-        if y < 0 or y >= self.height: return None
-        # if self.arr[x][y] != MapStatus.empty: return None
-        next_pos = Pos(x, y)
-        if next_pos in path: return None
-        # for key in Direction.__all__:
-        #     direction = getattr(Direction, key)
-        #     x = cur_pos.x + direction[0]
-        #     y = cur_pos.y + direction[1]
-        #     if self.arr[x][y] == MapStatus.path: return None
-        return next_pos
+    def dig_path(self, path, mtype=MapType.path):
+        for tile in path:
+            self.dig_tile(tile, mtype=mtype)
 
-    def search_path(self, cur_pos, ended_pos, path, deep, max_deep):
+    def dig_tile(self, tile, mtype=MapType.path):
+        if self.arr[tile.x][tile.y] != MapType.path:
+            self.dig_total += 1
+        self.arr[tile.x][tile.y] = mtype
+        # set wall
+        for t in tile.get_around():
+            x, y = t.x, t.y
+            if self.inside(x, y):
+                if self.arr[x][y] is MapType.empty:
+                    self.arr[t.x][t.y] = MapType.wall
+
+    def search_path(self, tile, target_tile, path, deep, max_deep):
         if deep >= max_deep:
             return None
-        if cur_pos == ended_pos:
-            self.dig_path(path)
+        if tile == target_tile:
             return path
 
-        dir_list = copy.copy(Direction.__all__)
-        random.shuffle(dir_list)
+        tile_list = tile.get_around()
+        random.shuffle(tile_list)
 
-        tmp_path, tmp_deep = None, max_deep
+        for tile in tile_list:
+            if self.inside(tile) is False: continue
+            if tile in path: continue
 
-        for key in dir_list:
-            next_pos = self.can_dig_next(cur_pos, getattr(Direction, key),
-                                         path)
-            if next_pos is None: continue
-
-            path = copy.copy(path)
-            path.append(next_pos)
-
-            return self.search_path(next_pos, ended_pos, path, deep + 1,
+            path.append(tile)
+            return self.search_path(tile, target_tile, path, deep + 1,
                                     max_deep)
+
         return None
 
-
     def create_path(self):
-        start_pos = self.start_pos
-        end_pos = self.end_pos
-        self.dig_pos(start_pos) 
-        self.dig_pos(end_pos) 
+        start_tile = self.start_tile
+        end_tile = self.end_tile
 
-        while start_pos != end_pos:
-            rand = random.randrange(100) % 5
-            if rand == 0:
+        while start_tile != end_tile:
+            r = random.randrange(RR.total)
+            if r in RR.whole:
                 range_width = range(self.width)
                 range_height = range(self.height)
-            elif rand == 1:
-                range_width = range(min(start_pos.x, end_pos.x))
-                range_width.extend(range(max(start_pos.x, end_pos.x), self.width))
-                range_height = range(min(start_pos.y, end_pos.y))
-                range_height.extend(range(max(start_pos.y, end_pos.y), self.height))
+            elif r in RR.outside:
+                range_width = range(min(start_tile.x, end_tile.x))
+                range_width.extend(range(
+                    max(start_tile.x, end_tile.x), self.width))
+                range_height = range(min(start_tile.y, end_tile.y))
+                range_height.extend(range(
+                    max(start_tile.y, end_tile.y), self.height))
+            # elif r in RR.inside:
             else:
-                range_width = range(min(start_pos.x, end_pos.x),max(start_pos.x, end_pos.x))
-                range_height = range(min(start_pos.y, end_pos.y),max(start_pos.y, end_pos.y))
+                range_width = range(
+                    min(start_tile.x, end_tile.x), max(start_tile.x,
+                                                       end_tile.x))
+                range_height = range(
+                    min(start_tile.y, end_tile.y), max(start_tile.y,
+                                                       end_tile.y))
 
-            if len(range_width) is 0 : range_width = [start_pos.x]
-            if len(range_height) is 0 : range_height = [start_pos.y]
+            if len(range_width) is 0: range_width = [end_tile.x]
+            if len(range_height) is 0: range_height = [end_tile.y]
 
-            pos_a = Pos(
-                random.choice(range_width),
-                random.choice(range_height))
-            pos_b = Pos(
-                random.choice(range_width),
-                random.choice(range_height))
+            tile_a = Tile(
+                random.choice(range_width), random.choice(range_height))
+            tile_b = Tile(
+                random.choice(range_width), random.choice(range_height))
 
-            if start_pos - pos_a <= start_pos - pos_b:
-                pos_a, pos_b = pos_b, pos_a
-            if end_pos - pos_b <= end_pos - pos_a:
-                pos_a, pos_b = pos_b, pos_a
+            if start_tile - tile_a <= start_tile - tile_b:
+                tile_a, tile_b = tile_b, tile_a
+            if end_tile - tile_b <= end_tile - tile_a:
+                tile_a, tile_b = tile_b, tile_a
 
-            path = self.search_path(start_pos, pos_a, [], 0, (start_pos - pos_a) * 2)
+            path = self.search_path(start_tile, tile_a, [], 0,
+                                    (start_tile - tile_a) * 2)
             if path is not None:
                 self.dig_path(path)
-                start_pos = pos_a
+                start_tile = tile_a
 
-            path = self.search_path(end_pos, pos_b, [], 0, (end_pos - pos_b) * 2)
+            path = self.search_path(end_tile, tile_b, [], 0,
+                                    (end_tile - tile_b) * 2)
             if path is not None:
                 self.dig_path(path)
-                end_pos = pos_b
+                end_tile = tile_b
+
+        self.dig_tile(self.start_tile, mtype=MapType.target)
+        self.dig_tile(self.end_tile, mtype=MapType.target)
+
+    def auto_create_path(self, total):
+        while self.dig_total < total:
+            self.create_path()
 
 
-a = Map((0, 0), (24, 24))
-# a = Map((0, 12), (24, 12))
-a.create_path()
-a.create_path()
-a.show_map()
-# Map((0, 12), (24, 12))
-# Map((random.randrange(16), random.randrange(16)), (random.randrange(16), random.randrange(16)))
+if __name__ == '__main__':
+    import os, time
+    for x in xrange(10):
+        os.system('clear')
+        print x
+        width = 40
+        height = 20
+        m = Map(
+            (random.randrange(width), 0),
+            (random.randrange(width), height - 1),
+            width=width,
+            height=height)
+        # m.create_path()
+        # m.create_path()
+        m.auto_create_path(100)
+        m.show_map()
+        time.sleep(2.1)
